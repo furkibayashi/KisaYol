@@ -14,7 +14,7 @@ from . import clipboard as _clipboard
 from .matcher import Match
 from .variables import resolve
 
-MODIFIER_KEYS = ("shift", "ctrl", "alt", "windows")
+MODIFIER_KEYS = ("shift", "ctrl", "alt", "alt gr", "windows")
 MODIFIER_WAIT = 0.5
 POLL = 0.01
 
@@ -75,33 +75,35 @@ class Expander:
             self._setting("date_fmt", "%d.%m.%Y"), self._setting("time_fmt", "%H:%M"))
 
         saved = None
-        if text:
-            if snippet.method == "paste":
-                try:
-                    saved = self.clip.backup()
-                    self.clip.set_text(text)
-                except Exception:
-                    if saved is not None:
-                        try:
-                            self.clip.restore(saved)
-                        except Exception:
-                            pass
-                    saved = None
-                    self._type(text)
+        try:
+            if text:
+                if snippet.method == "paste":
+                    try:
+                        saved = self.clip.backup()
+                        self.clip.set_text(text)
+                    except Exception:
+                        if saved is not None:
+                            try:
+                                self.clip.restore(saved)
+                            except Exception:
+                                pass
+                        saved = None
+                        self._type(text)
+                    else:
+                        self.sink.tap("ctrl+v")
                 else:
-                    self.sink.tap("ctrl+v")
-            else:
-                self._type(text)
+                    self._type(text)
 
-        if match.suffix:
-            self.sink.write(match.suffix, 0)
-        if cursor_left is not None:
-            for _ in range(cursor_left + len(match.suffix)):
-                self.sink.tap("left")
-
-        if saved is not None:
-            self.sleep(int(self._setting("restore_delay_ms", 150)) / 1000.0)
-            try:
-                self.clip.restore(saved)
-            except Exception:
-                pass
+            if match.suffix:
+                self.sink.write(match.suffix, 0)
+            if cursor_left is not None:
+                for _ in range(cursor_left + len(match.suffix)):
+                    self.sink.tap("left")
+        finally:
+            # Ne olursa olsun kullanıcının panosu geri yüklenir.
+            if saved is not None:
+                self.sleep(max(0, int(self._setting("restore_delay_ms", 150))) / 1000.0)
+                try:
+                    self.clip.restore(saved)
+                except Exception:
+                    pass

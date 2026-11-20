@@ -74,15 +74,43 @@ def to_win_hotkey(combo: str):
         vk = _NAMED_VK[key]
     elif key.startswith("f") and key[1:].isdigit() and 1 <= int(key[1:]) <= 24:
         vk = 0x6F + int(key[1:])
-    elif len(key) == 1 and sys.platform == "win32":
-        import ctypes
-        r = ctypes.windll.user32.VkKeyScanW(ord(key))
-        if r == -1 or r & 0xFF == 0xFF:
-            return None
-        vk = r & 0xFF
     else:
-        return None
+        return None   # noktalama tuşları düzene göre değişir (Shift/AltGr gerektirebilir): kaydedilmez
     return bits, vk
+
+
+def hotkey_problem(combo: str, altgr_char: Optional[Callable[[str], str]] = None) -> Optional[str]:
+    """Kısayol olarak kullanılamazsa i18n hata anahtarı, kullanılabilirse None.
+
+    - Ctrl/Alt/Win olmadan (F tuşları hariç) kısayol, o tuşu her uygulamada yazılamaz yapar.
+    - Ctrl+Alt+tuş, Türkçe Q gibi düzenlerde AltGr karakteridir (Ctrl+Alt+Q = @): kaydedilirse @ yazılamaz.
+    """
+    if to_win_hotkey(combo) is None:
+        return "err_hk_key"
+    mods, key = parse_combo(combo)
+    is_fkey = key.startswith("f") and key[1:].isdigit()
+    if not (set(mods) & {"ctrl", "alt", "windows"}) and not is_fkey:
+        return "err_hk_modifier"
+    if {"ctrl", "alt"} <= set(mods) and "windows" not in mods and altgr_char is not None and altgr_char(key):
+        return "err_hk_altgr"
+    return None
+
+
+def altgr_char(key: str) -> str:
+    """Geçerli klavye düzeninde AltGr (Ctrl+Alt) + tuş hangi karakteri üretiyor? ('' = hiçbiri)."""
+    if sys.platform != "win32" or len(key) != 1:
+        return ""
+    import ctypes
+    u = ctypes.windll.user32
+    layout = u.GetKeyboardLayout(u.GetWindowThreadProcessId(u.GetForegroundWindow(), None))
+    vk = ord(key.upper()) if key.isascii() and key.isalnum() else 0
+    if not vk:
+        return ""
+    state = (ctypes.c_ubyte * 256)()
+    state[0x11] = state[0x12] = 0x80   # VK_CONTROL, VK_MENU
+    buf = ctypes.create_unicode_buffer(8)
+    n = u.ToUnicodeEx(vk, u.MapVirtualKeyExW(vk, 0, layout), state, buf, 8, 4, layout)  # 4: dead-key durumunu bozma
+    return buf.value[:n] if n > 0 else ""
 
 
 class WinHotkeys:
@@ -170,6 +198,8 @@ class KeyHook:
         self._combos = {}
         self._win = None                       # WinHotkeys (gerçek kancada)
         self.external_hotkeys: Set[str] = set()  # Windows'a kaydedilen (RegisterHotKey) eylemler
+        self.own_foreground = False              # öndeki pencere KısaYol'a mı ait?
+        self.skip_own_windows = True             # False: test betiği kendi penceresinde dener
 
     # --- yapılandırma ---
     def set_hotkeys(self, pause: str, search: str) -> None:
@@ -221,8 +251,8 @@ class KeyHook:
                 if action not in self.external_hotkeys:
                     self.post(("hotkey", action))
                 return
-        if self.paused:
-            return
+        if self.paused or self.own_foreground:
+            return                     # KısaYol'un kendi penceresinde (arama, düzenleyici) genişletme yok
 
         if key == "backspace":
             self.matcher.backspace()
@@ -248,6 +278,17 @@ class KeyHook:
 
     def on_foreground_change(self) -> None:
         self.matcher.reset()
+        # Win+L gibi durumlarda tuş bırakma olayı kancaya hiç gelmez; basılı sanılan değiştiricileri düzelt.
+        self._pressed = {m for m in self._pressed if self._key_is_down(m)}
+
+    @staticmethod
+    def _key_is_down(name: str) -> bool:
+        if sys.platform != "win32":
+            return True
+        import ctypes
+        vks = {"ctrl": (0xA2, 0xA3), "shift": (0xA0, 0xA1), "alt": (0xA4,), "alt gr": (0xA5,),
+               "windows": (0x5B, 0x5C)}.get(name, ())
+        return any(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000 for vk in vks)
 
     # --- gerçek kancalar ---
     def start(self) -> None:
@@ -304,13 +345,25 @@ class KeyHook:
         if sys.platform != "win32":
             return
         import ctypes
-        get = ctypes.windll.user32.GetForegroundWindow
+        import os
+        u = ctypes.windll.user32
+        get = u.GetForegroundWindow
         get.restype = ctypes.c_void_p
+        u.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        me = os.getpid()
+
+        def owner(hwnd):
+            pid = ctypes.c_ulong(0)
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            return pid.value
+
         last = get()
+        self.own_foreground = self.skip_own_windows and bool(last) and owner(last) == me
         while not self._stop.wait(FOREGROUND_POLL):
             cur = get()
             if cur != last:
                 last = cur
+                self.own_foreground = self.skip_own_windows and bool(cur) and owner(cur) == me
                 self.on_foreground_change()
 
 
@@ -345,6 +398,44 @@ class ExpansionWorker:
         self._q.put(None)
 
 
+def unicode_units(text: str):
+    """Metni SendInput KEYEVENTF_UNICODE için UTF-16 kod birimlerine böler (emoji = iki birim)."""
+    data = text.encode("utf-16-le")
+    return [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
+
+
+def _send_unicode(text: str, delay_ms: int) -> None:
+    """Metni klavye düzeninden bağımsız, basılı tuşlara dokunmadan yazar (SendInput + KEYEVENTF_UNICODE)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
+                    ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    class MOUSEINPUT(ctypes.Structure):   # yalnızca birlik boyutu doğru olsun diye
+        _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
+                    ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    class _U(ctypes.Union):
+        _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", wintypes.DWORD), ("u", _U)]
+
+    KEYEVENTF_UNICODE, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x0004, 0x0002, 1
+    send = ctypes.windll.user32.SendInput
+    delay = max(0, delay_ms) / 1000.0
+    for unit in unicode_units(text):
+        events = (INPUT * 2)()
+        for i, flags in enumerate((KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)):
+            events[i].type = INPUT_KEYBOARD
+            events[i].u.ki = KEYBDINPUT(0, unit, flags, 0, 0)
+        send(2, events, ctypes.sizeof(INPUT))
+        if delay:
+            time.sleep(delay)
+
+
 class KeyboardSink:
     """KeySink'in `keyboard` kütüphanesiyle gerçek uygulaması."""
 
@@ -360,18 +451,23 @@ class KeyboardSink:
             keyboard.send(parts[0])
             return
         mods, last = parts[:-1], parts[-1]
-        for m in mods:
-            keyboard.press(m)
-        time.sleep(TAP_HOLD)
-        keyboard.press(last)
-        time.sleep(TAP_HOLD)
-        keyboard.release(last)
-        for m in reversed(mods):
-            keyboard.release(m)
+        pressed = []
+        try:
+            for m in mods:
+                keyboard.press(m)
+                pressed.append(m)
+            time.sleep(TAP_HOLD)
+            keyboard.press(last)
+            time.sleep(TAP_HOLD)
+            keyboard.release(last)
+        finally:
+            for m in reversed(pressed):     # hata olsa bile değiştirici takılı kalmasın
+                keyboard.release(m)
 
     def write(self, text: str, delay_ms: int) -> None:
-        import keyboard
-        keyboard.write(text, delay=max(0, delay_ms) / 1000.0)
+        # keyboard.write kullanılmaz: o an basılı tuşları (tetikleyicinin son tuşu, AltGr) bırakıp sonra
+        # yeniden basar; metnin sonuna fazladan harf ekler ve tuşları basılı bırakabilir.
+        _send_unicode(text, delay_ms)
 
     def release(self, key: str) -> None:
         import keyboard

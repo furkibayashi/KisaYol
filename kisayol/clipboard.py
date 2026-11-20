@@ -13,6 +13,9 @@ GMEM_MOVEABLE = 0x0002
 SKIP_FORMATS = frozenset({2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E})
 OPEN_TRIES = 10
 OPEN_WAIT = 0.02
+RESTORE_TRIES = 75          # geri yüklemede ~1.5 sn dene: pano yöneticileri panoyu bir süre tutabilir
+# Win+V geçmişine ve bulut panosuna düşmesin (adres, IBAN, imza gibi kalıplar burada birikmesin)
+NO_HISTORY_FORMATS = ("CanIncludeInClipboardHistory", "CanUploadToCloudClipboard")
 
 
 class ClipboardError(Exception):
@@ -33,6 +36,8 @@ if sys.platform == "win32":
     _u.GetClipboardData.restype = wintypes.HANDLE
     _u.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
     _u.SetClipboardData.restype = wintypes.HANDLE
+    _u.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+    _u.RegisterClipboardFormatW.restype = wintypes.UINT
     _u.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
                                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                                    wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
@@ -63,9 +68,12 @@ def _owner():
 
 
 class _Open:
+    def __init__(self, tries: int = OPEN_TRIES):
+        self.tries = tries
+
     def __enter__(self):
         owner = _owner()
-        for _ in range(OPEN_TRIES):
+        for _ in range(self.tries):
             if _u.OpenClipboard(owner):
                 return self
             time.sleep(OPEN_WAIT)
@@ -102,6 +110,15 @@ def _set(fmt: int, data: bytes) -> None:
         raise ClipboardError("SetClipboardData başarısız")
 
 
+def _mark_no_history() -> None:
+    zero = b"\x00\x00\x00\x00"
+    for name in NO_HISTORY_FORMATS:
+        try:
+            _set(_u.RegisterClipboardFormatW(name), zero)
+        except ClipboardError:
+            pass
+
+
 def get_text() -> str:
     with _Open():
         h = _u.GetClipboardData(CF_UNICODETEXT)
@@ -117,6 +134,7 @@ def set_text(s: str) -> None:
     with _Open():
         _u.EmptyClipboard()
         _set(CF_UNICODETEXT, data)
+        _mark_no_history()
 
 
 def backup() -> List[Tuple[int, bytes]]:
@@ -136,10 +154,15 @@ def backup() -> List[Tuple[int, bytes]]:
 
 
 def restore(data: List[Tuple[int, bytes]]) -> None:
-    with _Open():
+    no_history = {_u.RegisterClipboardFormatW(n) for n in NO_HISTORY_FORMATS}
+    with _Open(RESTORE_TRIES):
         _u.EmptyClipboard()
         for fmt, raw in data:
+            if fmt in no_history:
+                continue
             try:
                 _set(fmt, raw)
             except ClipboardError:
                 pass
+        # Geri yüklenen içerik zaten geçmişte; tekrar eklenmesin.
+        _mark_no_history()

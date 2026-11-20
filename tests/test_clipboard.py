@@ -43,3 +43,20 @@ def test_empty_restore_clears(clip):
     clip.set_text("x")
     clip.restore([])
     assert clip.get_text() == ""
+
+
+def test_set_text_excluded_from_clipboard_history(clip):
+    import ctypes
+    clip.set_text("gizli")
+    formats = dict(clip.backup())
+    hist = ctypes.windll.user32.RegisterClipboardFormatW("CanIncludeInClipboardHistory")
+    cloud = ctypes.windll.user32.RegisterClipboardFormatW("CanUploadToCloudClipboard")
+    assert formats[hist][:4] == b"\x00\x00\x00\x00"
+    assert formats[cloud][:4] == b"\x00\x00\x00\x00"
+
+
+def test_restore_excluded_from_clipboard_history(clip):
+    import ctypes
+    clip.restore([(13, "x\x00".encode("utf-16-le"))])
+    hist = ctypes.windll.user32.RegisterClipboardFormatW("CanIncludeInClipboardHistory")
+    assert hist in dict(clip.backup())

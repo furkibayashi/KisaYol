@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Callable, List, Optional
@@ -61,6 +62,18 @@ def validate_trigger(trigger: str, others: List[Snippet], self_id: Optional[str]
     return None
 
 
+def find_conflict(trigger: str, others: List[Snippet], self_id: Optional[str] = None) -> Optional[str]:
+    """Önek çakışması olan etkin sembollü tetikleyiciyi döner (arayüz hangi kalıpla çakıştığını gösterir)."""
+    if not is_symbol_trigger(trigger):
+        return None
+    for s in others:
+        if s.id == self_id or not s.enabled or not is_symbol_trigger(s.trigger) or s.trigger == trigger:
+            continue
+        if s.trigger.startswith(trigger) or trigger.startswith(s.trigger):
+            return s.trigger
+    return None
+
+
 def _from_dict(d) -> Optional[Snippet]:
     if not isinstance(d, dict):
         return None
@@ -87,21 +100,30 @@ class SnippetStore:
             self._reset_defaults()
             return
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
-            if not isinstance(data, dict):
-                raise ValueError("snippets.json kök nesnesi sözlük değil")
+            if not isinstance(data, dict) or not isinstance(data.get("snippets", []), list):
+                raise ValueError("snippets.json beklenen yapıda değil")
         except Exception:
             self._backup_corrupt()
             self._reset_defaults()
             return
         self.snippets = []
         self.groups = [DEFAULT_GROUP]
-        for g in data.get("groups") or []:
+        groups = data.get("groups")
+        for g in groups if isinstance(groups, list) else []:
             if isinstance(g, str) and g.strip() and g not in self.groups:
                 self.groups.append(g)
+        dropped = False
         for raw in data.get("snippets") or []:
-            self._accept(_from_dict(raw))
+            if self._accept(_from_dict(raw)) == "skipped":
+                dropped = True
+        if dropped:
+            # Atlanan kayıtlar bir sonraki kayıtta diskten silinir; kullanıcı kaybetmesin diye orijinali sakla.
+            try:
+                shutil.copyfile(self.path, self.path + ".bak")
+            except OSError:
+                pass
 
     def save(self) -> None:
         payload = {
@@ -178,11 +200,12 @@ class SnippetStore:
 
     def import_from(self, path: str) -> List[str]:
         """Kalıpları ekler; devre dışı alınan ya da zaten var olduğu için atlanan tetikleyicileri döner."""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or not isinstance(data.get("snippets", []), list):
             raise ValueError("geçersiz kalıp dosyası")
-        for g in data.get("groups") or []:
+        groups = data.get("groups")
+        for g in groups if isinstance(groups, list) else []:
             if isinstance(g, str) and g.strip() and g not in self.groups:
                 self.groups.append(g)
         flagged = []

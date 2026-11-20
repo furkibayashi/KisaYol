@@ -189,3 +189,77 @@ def test_keyboard_sink_tap_holds_modifiers(monkeypatch):
     assert events == [("press", "ctrl"), ("sleep", hook_mod.TAP_HOLD), ("press", "v"), ("sleep", hook_mod.TAP_HOLD),
                       ("release", "v"), ("release", "ctrl")]
     assert hook_mod.TAP_HOLD >= 0.01
+
+
+# --- son gözden geçirme düzeltmeleri ---
+
+def test_unicode_units_handles_surrogates():
+    from kisayol.hook import unicode_units
+    assert unicode_units("aİ😀") == [0x61, 0x130, 0xD83D, 0xDE00]
+
+
+def test_keyboard_sink_write_does_not_use_keyboard_write(monkeypatch):
+    import keyboard
+
+    from kisayol import hook as hook_mod
+    sent = []
+    monkeypatch.setattr(hook_mod, "_send_unicode", lambda text, delay: sent.append((text, delay)))
+    monkeypatch.setattr(keyboard, "write", lambda *a, **k: (_ for _ in ()).throw(AssertionError("keyboard.write")))
+    hook_mod.KeyboardSink().write("Selamlar,", 3)
+    assert sent == [("Selamlar,", 3)]
+
+
+def test_keyboard_sink_tap_releases_modifier_on_error(monkeypatch):
+    import keyboard
+
+    from kisayol import hook as hook_mod
+    events = []
+
+    def press(k):
+        events.append(("press", k))
+        if k == "v":
+            raise RuntimeError("boom")
+    monkeypatch.setattr(keyboard, "press", press)
+    monkeypatch.setattr(keyboard, "release", lambda k: events.append(("release", k)))
+    monkeypatch.setattr(hook_mod.time, "sleep", lambda s: None)
+    try:
+        hook_mod.KeyboardSink().tap("ctrl+v")
+    except RuntimeError:
+        pass
+    assert ("release", "ctrl") in events
+
+
+def test_foreground_change_resyncs_stale_modifiers():
+    hook, m, _, _ = make()
+    hook._pressed = {"windows", "shift"}
+    hook._key_is_down = lambda name: name == "shift"
+    hook.on_foreground_change()
+    assert hook._pressed == {"shift"}
+
+
+def test_own_window_in_front_is_not_fed():
+    hook, m, _, _ = make()
+    hook.own_foreground = True
+    hook.handle_key("a", "down", set())
+    assert m.calls == []
+
+
+def test_hotkey_problem_requires_real_modifier():
+    from kisayol.hook import hotkey_problem
+    assert hotkey_problem("a") == "err_hk_modifier"
+    assert hotkey_problem("shift+a") == "err_hk_modifier"
+    assert hotkey_problem("space") == "err_hk_modifier"
+    assert hotkey_problem("f9") is None
+    assert hotkey_problem("ctrl+alt+space") is None
+    assert hotkey_problem("ctrl+@") == "err_hk_key"
+
+
+def test_hotkey_problem_rejects_altgr_characters():
+    from kisayol.hook import hotkey_problem
+    assert hotkey_problem("ctrl+alt+q", altgr_char=lambda key: "@" if key == "q" else "") == "err_hk_altgr"
+    assert hotkey_problem("ctrl+alt+p", altgr_char=lambda key: "") is None
+
+
+def test_punctuation_keys_not_registered():
+    from kisayol.hook import to_win_hotkey
+    assert to_win_hotkey("ctrl+@") is None

@@ -41,11 +41,15 @@ def fg():
     return b.value
 def sc(name):
     return keyboard.key_to_scan_codes(name)[0]
-for k in json.loads(sys.argv[1]):
+keys = json.loads(sys.argv[1])
+for i, k in enumerate(keys):
+    last = i == len(keys) - 1
+    hold = 0.15 if last else 0   # son tuş insan gibi basılı tutulur (genişletme bu sırada çalışır)
     if k.startswith("shift+"):
-        keyboard.press("shift"); keyboard.send(sc(k[6:])); keyboard.release("shift")
+        keyboard.press("shift"); keyboard.press(sc(k[6:])); time.sleep(hold)
+        keyboard.release(sc(k[6:])); keyboard.release("shift")
     else:
-        keyboard.send(sc(k))
+        keyboard.press(sc(k)); time.sleep(hold); keyboard.release(sc(k))
     time.sleep(0.05)
     if len(sys.argv) > 2: open(sys.argv[2], "a", encoding="utf-8").write(f"{k} -> {fg()}" + chr(10))
 time.sleep(0.5)
@@ -85,6 +89,7 @@ def main():
     clipboard.set_text("PANO")
 
     hook, worker = build(SNIPPETS)
+    hook.skip_own_windows = False   # test penceresi kancayla aynı işlemde
     hook.start()
 
     user32 = ctypes.windll.user32

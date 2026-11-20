@@ -15,6 +15,9 @@ LANGUAGES = [
 STRINGS = {code: {} for code, _ in LANGUAGES}
 
 STRINGS["en"].update({
+    "err_hk_modifier": 'Use Ctrl, Alt or Win with the key (or an F key); otherwise that key could not be typed anywhere.',
+    "err_hk_key": 'This key cannot be used as a hotkey. Pick a letter, digit, F key or Space.',
+    "err_hk_altgr": 'On your keyboard layout this combination types “{c}” (AltGr). Pick another one.',
     "nav_snippets": "Snippets", "nav_settings": "Settings", "nav_about": "About",
     "desc_snippets": "Type a trigger anywhere and KısaYol replaces it with your text.",
     "desc_settings": "Language, theme, hotkeys and expansion options.",
@@ -66,6 +69,9 @@ STRINGS["en"].update({
 })
 
 STRINGS["tr"].update({
+    "err_hk_modifier": 'Tuşla birlikte Ctrl, Alt ya da Win kullanın (veya bir F tuşu); yoksa o tuş hiçbir yerde yazılamaz.',
+    "err_hk_key": 'Bu tuş kısayol olamaz. Bir harf, rakam, F tuşu ya da Boşluk seçin.',
+    "err_hk_altgr": 'Klavye düzeninizde bu kombinasyon “{c}” yazar (AltGr). Başka bir kombinasyon seçin.',
     "nav_snippets": "Kalıplar", "nav_settings": "Ayarlar", "nav_about": "Hakkında",
     "desc_snippets": "Herhangi bir yerde tetikleyiciyi yazın, KısaYol onu metninizle değiştirsin.",
     "desc_settings": "Dil, tema, kısayollar ve genişletme seçenekleri.",
@@ -116,6 +122,9 @@ STRINGS["tr"].update({
 })
 
 STRINGS["de"].update({
+    "err_hk_modifier": 'Verwenden Sie Strg, Alt oder Win mit der Taste (oder eine F-Taste); sonst ließe sich die Taste nirgends mehr tippen.',
+    "err_hk_key": 'Diese Taste kann kein Tastenkürzel sein. Wählen Sie einen Buchstaben, eine Ziffer, eine F-Taste oder die Leertaste.',
+    "err_hk_altgr": 'In Ihrem Tastaturlayout erzeugt diese Kombination „{c}“ (AltGr). Wählen Sie eine andere.',
     "nav_snippets": "Textbausteine", "nav_settings": "Einstellungen", "nav_about": "Über",
     "desc_snippets": "Tippen Sie irgendwo ein Kürzel – KısaYol ersetzt es durch Ihren Text.",
     "desc_settings": "Sprache, Design, Tastenkürzel und Erweiterungsoptionen.",
@@ -165,6 +174,9 @@ STRINGS["de"].update({
 })
 
 STRINGS["es"].update({
+    "err_hk_modifier": 'Usa Ctrl, Alt o Win con la tecla (o una tecla F); si no, esa tecla no podría escribirse en ningún sitio.',
+    "err_hk_key": 'Esta tecla no puede ser un atajo. Elige una letra, un número, una tecla F o Espacio.',
+    "err_hk_altgr": 'En tu distribución de teclado esta combinación escribe «{c}» (AltGr). Elige otra.',
     "nav_snippets": "Fragmentos", "nav_settings": "Ajustes", "nav_about": "Acerca de",
     "desc_snippets": "Escribe un atajo en cualquier lugar y KısaYol lo reemplaza por tu texto.",
     "desc_settings": "Idioma, tema, atajos y opciones de expansión.",
@@ -216,6 +228,9 @@ STRINGS["es"].update({
 })
 
 STRINGS["fr"].update({
+    "err_hk_modifier": 'Utilisez Ctrl, Alt ou Win avec la touche (ou une touche F) ; sinon cette touche ne pourrait plus être tapée nulle part.',
+    "err_hk_key": 'Cette touche ne peut pas servir de raccourci. Choisissez une lettre, un chiffre, une touche F ou Espace.',
+    "err_hk_altgr": 'Avec votre disposition de clavier, cette combinaison tape « {c} » (AltGr). Choisissez-en une autre.',
     "nav_snippets": "Extraits", "nav_settings": "Paramètres", "nav_about": "À propos",
     "desc_snippets": "Tapez un raccourci n'importe où : KısaYol le remplace par votre texte.",
     "desc_settings": "Langue, thème, raccourcis et options d'expansion.",
@@ -269,6 +284,9 @@ STRINGS["fr"].update({
 })
 
 STRINGS["pt"].update({
+    "err_hk_modifier": 'Use Ctrl, Alt ou Win com a tecla (ou uma tecla F); caso contrário, essa tecla não poderia ser digitada em lugar nenhum.',
+    "err_hk_key": 'Esta tecla não pode ser um atalho. Escolha uma letra, um número, uma tecla F ou Espaço.',
+    "err_hk_altgr": 'No seu layout de teclado, esta combinação digita “{c}” (AltGr). Escolha outra.',
     "nav_snippets": "Trechos", "nav_settings": "Configurações", "nav_about": "Sobre",
     "desc_snippets": "Digite um atalho em qualquer lugar e o KısaYol o troca pelo seu texto.",
     "desc_settings": "Idioma, tema, atalhos e opções de expansão.",
@@ -320,6 +338,9 @@ STRINGS["pt"].update({
 })
 
 STRINGS["ru"].update({
+    "err_hk_modifier": 'Используйте с клавишей Ctrl, Alt или Win (или клавишу F); иначе эту клавишу нельзя будет набрать нигде.',
+    "err_hk_key": 'Эту клавишу нельзя назначить горячей. Выберите букву, цифру, клавишу F или пробел.',
+    "err_hk_altgr": 'В вашей раскладке это сочетание вводит «{c}» (AltGr). Выберите другое.',
     "nav_snippets": "Шаблоны", "nav_settings": "Настройки", "nav_about": "О программе",
     "desc_snippets": "Введите сокращение где угодно — KısaYol заменит его вашим текстом.",
     "desc_settings": "Язык, тема, горячие клавиши и параметры подстановки.",

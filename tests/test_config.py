@@ -46,3 +46,16 @@ def test_defaults_not_mutated(tmp_path):
     c = Config(str(tmp_path / "settings.json"))
     c["app"]["theme"] = "neon"
     assert DEFAULTS["app"]["theme"] == "midnight"
+
+
+def test_utf8_bom_settings_load(tmp_path):
+    p = tmp_path / "settings.json"
+    p.write_bytes("\ufeff".encode("utf-8") + json.dumps({"app": {"theme": "ocean"}}).encode("utf-8"))
+    assert Config(str(p)).get("app", "theme") == "ocean"
+
+
+def test_negative_delays_rejected(tmp_path):
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"app": {"restore_delay_ms": -5, "type_delay_ms": -1}}), encoding="utf-8")
+    c = Config(str(p))
+    assert c.get("app", "restore_delay_ms") == 150 and c.get("app", "type_delay_ms") == 2

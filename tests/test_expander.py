@@ -161,3 +161,30 @@ def test_empty_result_only_deletes():
     exp, sink, _, _ = make()
     exp.expand(match("{imleç}"))
     assert sink.events == [("tap", "backspace")] * 4
+
+
+def test_waits_for_and_releases_altgr():
+    sink = FakeSink(pressed={"alt gr"})
+    exp, sink, _, _ = make(sink=sink)
+    exp.expand(match("Adres"))
+    assert ("release", "alt gr") in sink.events
+    assert sink.events.index(("release", "alt gr")) < sink.events.index(("tap", "backspace"))
+
+
+def test_clipboard_restored_even_if_paste_fails():
+    class Boom(FakeSink):
+        def tap(self, key):
+            if key == "ctrl+v":
+                raise RuntimeError("tus gonderilemedi")
+            super().tap(key)
+    exp, sink, _, _ = make(sink=Boom())
+    with pytest.raises(RuntimeError):
+        exp.expand(match("Adres"))
+    assert ("restore", [(13, b"BACKUP")]) in sink.events
+
+
+def test_negative_restore_delay_is_clamped():
+    exp, sink, _, clock = make(restore_delay_ms=-5)
+    exp.expand(match("Adres"))
+    assert clock.total == 0
+    assert ("restore", [(13, b"BACKUP")]) in sink.events

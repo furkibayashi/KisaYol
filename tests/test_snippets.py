@@ -157,3 +157,38 @@ def test_active_excludes_disabled(tmp_path):
     store.load()
     store.snippets = [Snippet(";a", "A"), Snippet(";b", "B", enabled=False)]
     assert [s.trigger for s in store.active()] == [";a"]
+
+
+def test_utf8_bom_file_loads(tmp_path):
+    path = tmp_path / "snippets.json"
+    path.write_bytes("\ufeff".encode("utf-8") + json.dumps({"snippets": [{"trigger": ";bom", "text": "İ"}]}).encode("utf-8"))
+    store = SnippetStore(str(path))
+    store.load()
+    assert [s.trigger for s in store.snippets] == [";bom"]
+    assert not (tmp_path / "snippets.json.bak").exists()
+
+
+def test_non_list_values_do_not_crash(tmp_path):
+    path = tmp_path / "snippets.json"
+    path.write_text(json.dumps({"snippets": 5, "groups": 3}), encoding="utf-8")
+    store = SnippetStore(str(path))
+    store.load()
+    assert (tmp_path / "snippets.json.bak").exists()
+    assert [s.trigger for s in store.snippets] == [";tarih", ";mail", ";imza"]
+
+
+def test_skipped_entries_keep_a_backup(tmp_path):
+    path = tmp_path / "snippets.json"
+    original = json.dumps({"snippets": [{"trigger": ";ok", "text": "x"}, {"trigger": ";ok", "text": "kopya"}]})
+    path.write_text(original, encoding="utf-8")
+    store = SnippetStore(str(path))
+    store.load()
+    assert [s.trigger for s in store.snippets] == [";ok"]
+    assert (tmp_path / "snippets.json.bak").read_text("utf-8") == original
+
+
+def test_find_conflict_names_the_clashing_trigger():
+    from kisayol.snippets import find_conflict
+    assert find_conflict(";a", [Snippet(";ad", "x")]) == ";ad"
+    assert find_conflict(";ad", [Snippet(";a", "x")]) == ";a"
+    assert find_conflict(";b", [Snippet(";a", "x")]) is None

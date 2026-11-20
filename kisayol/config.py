@@ -87,12 +87,16 @@ class Config:
         if not os.path.exists(self.path):
             return
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, "r", encoding="utf-8-sig") as f:
                 loaded = json.load(f)
             if isinstance(loaded, dict):
                 _merge(self.data, loaded)
         except Exception:
             pass
+        app = self.data["app"]
+        for key in ("type_delay_ms", "restore_delay_ms"):
+            if app[key] < 0:
+                app[key] = DEFAULTS["app"][key]
 
     def save(self) -> None:
         with self._lock:

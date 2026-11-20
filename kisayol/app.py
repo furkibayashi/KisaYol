@@ -19,11 +19,12 @@ import customtkinter as ctk
 from . import APP_NAME, VERSION, themes, winutil
 from .config import Config, config_dir
 from .expander import Expander
-from .hook import ExpansionWorker, KeyboardSink, KeyHook, pretty_combo
+from .hook import ExpansionWorker, KeyboardSink, KeyHook, altgr_char, hotkey_problem, pretty_combo
 from .i18n import LANGUAGES, T, detect_language, set_language
 from .matcher import Match, Matcher
 from .search import filter_snippets
-from .snippets import DEFAULT_GROUP, Snippet, SnippetStore, is_symbol_trigger, validate_trigger
+from .snippets import (DEFAULT_GROUP, Snippet, SnippetStore, find_conflict, is_symbol_trigger,
+                       validate_trigger)
 from .tray import Tray
 
 REPO_URL = "https://github.com/furkibayashi/KisaYol"
@@ -289,6 +290,8 @@ class App:
 
     def show_page(self, key):
         p = self.p
+        if key != "settings":
+            self.cancel_capture()   # yakalama açık kalırsa başka bir uygulamada basılan tuş kısayol olur
         self.page = key
         for k, item in self.nav.items():
             item.set_active(k == key)
@@ -474,7 +477,13 @@ class App:
         def show_info(err):
             trig = tv.get()
             if err:
-                info.configure(text="⚠ " + T(err), text_color=p["err"])
+                msg = T(err)
+                if err == "err_prefix_conflict":
+                    cur_s = self._current()
+                    other = find_conflict(trig, self.store.snippets, cur_s.id if cur_s else None)
+                    if other:
+                        msg += f"  → {other}"
+                info.configure(text="⚠ " + msg, text_color=p["err"])
                 self._w_trigger.configure(border_color=p["err"])
             else:
                 hint = "trigger_hint_symbol" if is_symbol_trigger(trig) else "trigger_hint_bare"
@@ -722,10 +731,20 @@ class App:
         self.hook.start_capture(lambda combo: self.post(("captured", action, combo)))
         self.show_page("settings")
 
+    def cancel_capture(self):
+        if self.capturing:
+            self.capturing = None
+            self.hook.cancel_capture()
+
     def set_hotkey(self, action, combo):
         a = self.cfg["app"]
         key = dict(HOTKEY_ACTIONS)[action]
         if combo:
+            problem = hotkey_problem(combo, altgr_char)
+            if problem:
+                parsed_key = combo.split("+")[-1]
+                messagebox.showwarning(APP_NAME, T(problem, c=altgr_char(parsed_key)), parent=self.root)
+                return
             for other, okey in HOTKEY_ACTIONS:
                 if other != action and a[okey] == combo:
                     a[okey] = ""
@@ -792,6 +811,7 @@ class App:
             pass
 
     def hide_to_tray(self):
+        self.cancel_capture()
         self.cfg["app"]["geometry"] = self.root.geometry()
         self.cfg.save_later()
         self.root.withdraw()

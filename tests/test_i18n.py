@@ -31,3 +31,10 @@ def test_every_language_translates_every_key():
 def test_error_keys_exist_for_validation():
     for key in ("err_empty", "err_short", "err_space", "err_bare_not_alnum", "err_duplicate", "err_prefix_conflict"):
         assert key in i18n.STRINGS["en"]
+
+
+def test_hotkey_error_keys_exist():
+    for key in ("err_hk_modifier", "err_hk_key", "err_hk_altgr"):
+        assert key in i18n.STRINGS["en"]
+    i18n.set_language("tr")
+    assert "@" in i18n.T("err_hk_altgr", c="@")
