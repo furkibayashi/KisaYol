@@ -156,3 +156,36 @@ def test_capture_escape_cancels():
     hook.start_capture(got.append)
     hook.handle_key("esc", "down", set())
     assert got == [None]
+
+
+
+def test_external_hotkeys_not_posted_and_not_fed():
+    hook, m, _, posts = make()
+    hook.external_hotkeys = {"pause"}
+    hook.handle_key("p", "down", {"ctrl", "alt"})
+    assert posts == [] and m.calls == []
+    hook.handle_key("space", "down", {"ctrl", "alt"})
+    assert posts == [("hotkey", "search")]
+
+
+def test_win_hotkey_mapping():
+    from kisayol.hook import MOD_NOREPEAT, to_win_hotkey
+    assert to_win_hotkey("ctrl+alt+space") == (0x0001 | 0x0002 | MOD_NOREPEAT, 0x20)
+    assert to_win_hotkey("ctrl+alt+p") == (0x0001 | 0x0002 | MOD_NOREPEAT, ord("P"))
+    assert to_win_hotkey("shift+windows+f9") == (0x0004 | 0x0008 | MOD_NOREPEAT, 0x78)
+    assert to_win_hotkey("ctrl+7") == (0x0002 | MOD_NOREPEAT, ord("7"))
+    assert to_win_hotkey("") is None
+
+
+def test_keyboard_sink_tap_holds_modifiers(monkeypatch):
+    import keyboard
+
+    from kisayol import hook as hook_mod
+    events = []
+    monkeypatch.setattr(keyboard, "press", lambda k: events.append(("press", k)))
+    monkeypatch.setattr(keyboard, "release", lambda k: events.append(("release", k)))
+    monkeypatch.setattr(hook_mod.time, "sleep", lambda s: events.append(("sleep", s)))
+    hook_mod.KeyboardSink().tap("ctrl+v")
+    assert events == [("press", "ctrl"), ("sleep", hook_mod.TAP_HOLD), ("press", "v"), ("sleep", hook_mod.TAP_HOLD),
+                      ("release", "v"), ("release", "ctrl")]
+    assert hook_mod.TAP_HOLD >= 0.01
