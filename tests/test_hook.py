@@ -136,3 +136,23 @@ def test_foreground_change_resets():
 def test_parse_combo():
     assert parse_combo("ctrl+alt+space") == (frozenset({"ctrl", "alt"}), "space")
     assert parse_combo("") is None
+
+
+def test_capture_returns_combo_and_skips_matcher():
+    hook, m, _, posts = make()
+    got = []
+    hook.start_capture(got.append)
+    hook.handle_key("ctrl", "down", {"ctrl"})
+    hook.handle_key("k", "down", {"ctrl", "alt"})
+    assert got == ["alt+ctrl+k"]
+    assert m.calls == [] and posts == []
+    hook.handle_key("a", "down", set())
+    assert m.calls == [("feed", "a")]
+
+
+def test_capture_escape_cancels():
+    hook, _, _, _ = make()
+    got = []
+    hook.start_capture(got.append)
+    hook.handle_key("esc", "down", set())
+    assert got == [None]

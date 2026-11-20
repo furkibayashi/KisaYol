@@ -19,3 +19,15 @@ def test_format_args():
 def test_all_seven_languages_selectable():
     for code, _name in i18n.LANGUAGES:
         assert code in i18n.STRINGS
+
+
+def test_every_language_translates_every_key():
+    en = set(i18n.STRINGS["en"])
+    for code, _name in i18n.LANGUAGES:
+        missing = en - set(i18n.STRINGS[code])
+        assert not missing, (code, sorted(missing))
+
+
+def test_error_keys_exist_for_validation():
+    for key in ("err_empty", "err_short", "err_space", "err_bare_not_alnum", "err_duplicate", "err_prefix_conflict"):
+        assert key in i18n.STRINGS["en"]

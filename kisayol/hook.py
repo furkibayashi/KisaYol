@@ -60,6 +60,7 @@ class KeyHook:
         self._pressed: Set[str] = set()
         self._started = False
         self._stop = threading.Event()
+        self._capture_cb: Optional[Callable] = None
 
     # --- yapılandırma ---
     def set_hotkeys(self, pause: str, search: str) -> None:
@@ -69,6 +70,13 @@ class KeyHook:
             if parsed:
                 hk[action] = parsed
         self._hotkeys = hk
+
+    def start_capture(self, callback: Callable) -> None:
+        """Sonraki tuş kombinasyonunu callback("ctrl+alt+k") ile verir; Esc → callback(None)."""
+        self._capture_cb = callback
+
+    def cancel_capture(self) -> None:
+        self._capture_cb = None
 
     @contextlib.contextmanager
     def suspended(self):
@@ -88,6 +96,11 @@ class KeyHook:
         if key in MODIFIERS or key in LOCK_KEYS:
             return
         held = {m for m in pressed if m in MODIFIERS}
+
+        if self._capture_cb is not None:
+            cb, self._capture_cb = self._capture_cb, None
+            cb(None if key == "esc" else "+".join(sorted(held - {"alt gr"}) + [key]))
+            return
 
         for action, (mods, hk_key) in self._hotkeys.items():
             if hk_key == key and set(mods) == held:
